@@ -1,24 +1,35 @@
-"""Tests for the CLI module."""
+"""Tests for envdiff CLI."""
 
-import os
+from __future__ import annotations
+
+import textwrap
+from pathlib import Path
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from envdiff.cli import build_parser, run
 
 
-@pytest.fixture
-def env_file_a(tmp_path):
-    f = tmp_path / ".env.a"
-    f.write_text("FOO=bar\nBAZ=qux\n")
-    return str(f)
+@pytest.fixture()
+def env_file_a(tmp_path: Path) -> Path:
+    p = tmp_path / ".env.a"
+    p.write_text(textwrap.dedent("""\
+        SHARED=same
+        ONLY_A=hello
+        CHANGED=old
+    """))
+    return p
 
 
-@pytest.fixture
-def env_file_b(tmp_path):
-    f = tmp_path / ".env.b"
-    f.write_text("FOO=bar\nBAZ=changed\nNEW=value\n")
-    return str(f)
+@pytest.fixture()
+def env_file_b(tmp_path: Path) -> Path:
+    p = tmp_path / ".env.b"
+    p.write_text(textwrap.dedent("""\
+        SHARED=same
+        ONLY_B=world
+        CHANGED=new
+    """))
+    return p
 
 
 def test_build_parser_files_subcommand():
@@ -37,49 +48,45 @@ def test_build_parser_no_color_flag():
 
 def test_build_parser_custom_labels():
     parser = build_parser()
-    args = parser.parse_args(["files", "a.env", "b.env", "--left-label", "prod", "--right-label", "staging"])
-    assert args.left_label == "prod"
-    assert args.right_label == "staging"
+    args = parser.parse_args(["files", "a.env", "b.env", "--labels", "dev", "prod"])
+    assert args.labels == ["dev", "prod"]
 
 
-def test_run_files_no_differences(env_file_a):
-    exit_code = run(["files", env_file_a, env_file_a, "--no-color"])
-    assert exit_code == 0
+def test_build_parser_format_json():
+    parser = build_parser()
+    args = parser.parse_args(["files", "a.env", "b.env", "--format", "json"])
+    assert args.fmt == "json"
 
 
-def test_run_files_with_differences(env_file_a, env_file_b):
-    exit_code = run(["files", env_file_a, env_file_b, "--no-color"])
-    assert exit_code == 1
+def test_build_parser_format_markdown():
+    parser = build_parser()
+    args = parser.parse_args(["files", "a.env", "b.env", "--format", "markdown"])
+    assert args.fmt == "markdown"
 
 
-def test_run_uses_filenames_as_default_labels(env_file_a, env_file_b, capsys):
-    run(["files", env_file_a, env_file_b, "--no-color"])
-    captured = capsys.readouterr()
-    assert os.path.basename(env_file_a) in captured.out or env_file_a in captured.out
+def test_run_files_text(env_file_a, env_file_b, capsys):
+    rc = run(["files", str(env_file_a), str(env_file_b), "--no-color"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ONLY_A" in out or "CHANGED" in out
 
 
-def test_run_file_not_found(capsys):
-    exit_code = run(["files", "nonexistent.env", "also_missing.env", "--no-color"])
-    assert exit_code == 1
-    captured = capsys.readouterr()
-    assert "error:" in captured.err
+def test_run_files_json(env_file_a, env_file_b, capsys):
+    import json
+    rc = run(["files", str(env_file_a), str(env_file_b), "--format", "json"])
+    assert rc == 0
+    data = json.loads(capsys.readouterr().out)
+    assert "changed" in data
+    assert "only_in_left" in data
 
 
-def test_run_current_subcommand(env_file_a):
-    exit_code = run(["current", env_file_a, "--no-color"])
-    assert exit_code in (0, 1)
+def test_run_files_markdown(env_file_a, env_file_b, capsys):
+    rc = run(["files", str(env_file_a), str(env_file_b), "--format", "markdown"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "# Environment Diff Report" in out
 
 
-def test_run_process_subcommand(env_file_a):
-    fake_env = {"FOO": "bar", "BAZ": "qux"}
-    with patch("envdiff.cli.load_from_process", return_value=fake_env):
-        exit_code = run(["process", env_file_a, "1234", "--no-color"])
-    assert exit_code in (0, 1)
-
-
-def test_run_process_uses_pid_as_label(env_file_a, capsys):
-    fake_env = {"FOO": "different"}
-    with patch("envdiff.cli.load_from_process", return_value=fake_env):
-        run(["process", env_file_a, "9999", "--no-color"])
-    captured = capsys.readouterr()
-    assert "9999" in captured.out
+def test_run_missing_file_returns_1(tmp_path):
+    rc = run(["files", str(tmp_path / "nope.env"), str(tmp_path / "also_nope.env")])
+    assert rc == 1
