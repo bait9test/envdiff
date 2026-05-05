@@ -57,3 +57,18 @@ def test_load_snapshot_as_env_empty_env(tmp_path):
     save_snapshot({}, snap)
     loaded = load_snapshot_as_env(snap)
     assert loaded == {}
+
+
+def test_load_snapshot_as_env_missing_env_key(tmp_path):
+    """Snapshot JSON that lacks the 'env' key should raise ValueError."""
+    snap = tmp_path / "no_env.json"
+    payload = {
+        "version": 1,
+        "created_at": "2024-01-01T00:00:00+00:00",
+        "label": "test",
+        "source": "manual",
+        # 'env' key intentionally omitted
+    }
+    snap.write_text(json.dumps(payload))
+    with pytest.raises(ValueError, match="env"):
+        load_snapshot_as_env(snap)
