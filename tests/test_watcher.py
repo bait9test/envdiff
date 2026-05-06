@@ -85,3 +85,11 @@ def test_watch_two_files_both_missing(tmp_path):
     b = str(tmp_path / "b.env")
     watch_two_files(a, b, calls.append, interval=0.05, max_cycles=2)
     assert calls == []
+
+
+def test_watch_two_files_only_one_missing(env_file, tmp_path):
+    """Watcher should not crash or fire callbacks when one of the two files is missing."""
+    calls = []
+    missing = str(tmp_path / "missing.env")
+    watch_two_files(str(env_file), missing, calls.append, interval=0.05, max_cycles=2)
+    assert calls == []
