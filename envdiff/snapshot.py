@@ -71,3 +71,22 @@ def snapshot_metadata(path: str | Path) -> Dict[str, object]:
         "source": payload.get("source"),
         "key_count": len(payload.get("env", {})),
     }
+
+
+def capture_snapshot(
+    path: str | Path,
+    label: Optional[str] = None,
+    source: Optional[str] = None,
+) -> None:
+    """Capture the current process environment and save it as a snapshot.
+
+    Convenience wrapper around :func:`save_snapshot` that automatically uses
+    ``os.environ`` as the environment to snapshot.
+
+    Args:
+        path: Destination file path for the snapshot.
+        label: Human-readable label for the snapshot. Defaults to the file stem.
+        source: Free-form string describing where the snapshot was taken.
+            Defaults to ``"live"``.
+    """
+    save_snapshot(dict(os.environ), path, label=label, source=source or "live")
